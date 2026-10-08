@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Mini Mario Game</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #5c94fc;
+            font-family: Arial, sans-serif;
+        }
+
+        canvas {
+            display: block;
+            background: #5c94fc;
+        }
+
+        #info {
+            position: fixed;
+            top: 10px;
+            left: 15px;
+            color: white;
+            font-size: 20px;
+            font-weight: bold;
+            z-index: 10;
+            text-shadow: 2px 2px #000;
+        }
+
+        #gameOver {
+            display: none;
+            position: fixed;
+            top: 40%;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-size: 50px;
+            font-weight: bold;
+            text-shadow: 4px 4px #000;
+        }
+    </style>
+</head>
+
+<body>
+
+<div id="info">
+    Score: <span id="score">0</span>
+    &nbsp;&nbsp; Lives: <span id="lives">3</span>
+</div>
+
+<div id="gameOver">
+    GAME OVER<br>
+    <small>Press R to restart</small>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+// -------------------------
+// GAME VARIABLES
+// -------------------------
+
+let score = 0;
+let lives = 3;
+
+let keys = {};
+
+let cameraX = 0;
+
+const gravity = 0.7;
+const speed = 5;
+const jumpPower = -14;
+
+// -------------------------
+// PLAYER
+// -------------------------
+
+const player = {
+    x: 100,
+    y: 300,
+    width: 35,
+    height: 45,
+
+    vx: 0,
+    vy: 0,
+
+    grounded: false
+};
+
+// -------------------------
+// PLATFORMS
+// -------------------------
+
+const platforms = [
+
+    {x: 0, y: 500, width: 900, height: 60},
+    {x: 1000, y: 500, width: 500, height: 60},
+    {x: 1600, y: 500, width: 700, height: 60},
+    {x: 2400, y: 500, width: 800, height: 60},
+
+    // Floating platforms
+
+    {x: 350, y: 400, width: 150, height: 25},
+    {x: 600, y: 330, width: 150, height: 25},
+
+    {x: 1100, y: 390, width: 150, height: 25},
+    {x: 1350, y: 320, width: 150, height: 25},
+
+    {x: 1750, y: 390, width: 150, height: 25},
+    {x: 2000, y: 320, width: 150, height: 25},
+
+    {x: 2600, y: 390, width: 150, height: 25}
+];
+
+// -------------------------
+// COINS
+// -------------------------
+
+let coins = [
+
+    {x: 400, y: 350, collected: false},
+    {x: 650, y: 280, collected: false},
+
+    {x: 1150, y: 340, collected: false},
+    {x: 1400, y: 270, collected: false},
+
+    {x: 1800, y: 340, collected: false},
+    {x: 2050, y: 270, collected: false},
+
+    {x: 2650, y: 340, collected: false},
+
+    {x: 800, y: 450, collected: false},
+    {x: 1550, y: 450, collected: false},
+    {x: 2300, y: 450, collected: false}
+];
+
+// -------------------------
+// ENEMIES
+// -------------------------
+
+let enemies = [
+
+    {
+        x: 700,
+        y: 450,
+        width: 35,
+        height: 35,
+        vx: 2
+    },
+
+    {
+        x: 1200,
+        y: 450,
+        width: 35,
+        height: 35,
+        vx: 2
+    },
+
+    {
+        x: 1900,
+        y: 450,
+        width: 35,
+        height: 35,
+        vx: 2
+    },
+
+    {
+        x: 2700,
+        y: 450,
+        width: 35,
+        height: 35,
+        vx: 2
+    }
+];
+
+// -------------------------
+// GOAL
+// -------------------------
+
+const goal = {
+    x: 3100,
+    y: 350,
+    width: 20,
+    height: 150
+};
+
+// -------------------------
+// KEYBOARD
+// -------------------------
+
+document.addEventListener("keydown", function(e) {
+
+    keys[e.key.toLowerCase()] = true;
+
+    // Jump
+    if (
+        (e.key === "ArrowUp" ||
+         e.key === "w" ||
+         e.key === " ")
+        && player.grounded
+    ) {
+        player.vy = jumpPower;
+        player.grounded = false;
+    }
+
+    // Restart
+    if (e.key.toLowerCase() === "r") {
+        restart();
+    }
+});
+
+document.addEventListener("keyup", function(e) {
+    keys[e.key.toLowerCase()] = false;
+});
+
+// -------------------------
+// COLLISION FUNCTION
+// -------------------------
+
+function collision(a, b) {
+
+    return (
+        a.x < b.x + b.width &&
+        a.x + a.width > b.x &&
+        a.y < b.y + b.height &&
+        a.y + a.height > b.y
+    );
+
+}
+
+// -------------------------
+// UPDATE PLAYER
+// -------------------------
+
+function updatePlayer() {
+
+    player.vx = 0;
+
+    if (keys["arrowright"] || keys["d"]) {
+        player.vx = speed;
+    }
+
+    if (keys["arrowleft"] || keys["a"]) {
+        player.vx = -speed;
+    }
+
+    // Gravity
+    player.vy += gravity;
+
+    // Horizontal movement
+    player.x += player.vx;
+
+    // Vertical movement
+    player.y += player.vy;
+
+    player.grounded = false;
+
+    // Platform collision
+    for (let platform of platforms) {
+
+        if (collision(player, platform)) {
+
+            // Falling onto platform
+            if (
+                player.vy > 0 &&
+                player.y + player.height - player.vy <= platform.y
+            ) {
+
+                player.y = platform.y - player.height;
+
+                player.vy = 0;
+
+                player.grounded = true;
+            }
+
+            // Hitting bottom of platform
+            else if (
+                player.vy < 0 &&
+                player.y - player.vy >= platform.y + platform.height
+            ) {
+
+                player.y = platform.y + platform.height;
+
+                player.vy = 0;
+            }
+
+        }
+    }
+
+    // Camera follows player
+    cameraX = player.x - 250;
+
+    if (cameraX < 0)
+        cameraX = 0;
+
+    // Player falls
+    if (player.y > canvas.height + 100) {
+
+        loseLife();
+    }
+}
+
+// -------------------------
+// UPDATE ENEMIES
+// -------------------------
+
+function updateEnemies() {
+
+    for (let enemy of enemies) {
+
+        enemy.x += enemy.vx;
+
+        // Simple movement boundaries
+        if (enemy.x < 0 || enemy.x > 3100) {
+            enemy.vx *= -1;
+        }
+
+        // Player touches enemy
+        if (collision(player, enemy)) {
+
+            // Jumping on enemy
+            if (
+                player.vy > 0 &&
+                player.y + player.height < enemy.y + 20
+            ) {
+
+                score += 100;
+
+                enemy.x = -1000;
+
+                player.vy = -10;
+
+            } else {
+
+                loseLife();
+            }
+        }
+    }
+}
+
+// -------------------------
+// COINS
+// -------------------------
+
+function updateCoins() {
+
+    for (let coin of coins) {
+
+        if (!coin.collected) {
+
+            let coinBox = {
+                x: coin.x,
+                y: coin.y,
+                width: 25,
+                height: 25
+            };
+
+            if (collision(player, coinBox)) {
+
+                coin.collected = true;
+
+                score += 50;
+            }
+        }
+    }
+}
+
+// -------------------------
+// GOAL
+// -------------------------
+
+function checkGoal() {
+
+    if (collision(player, goal)) {
+
+        alert("🎉 YOU WIN!\nScore: " + score);
+
+        restart();
+    }
+}
+
+// -------------------------
+// LOSE LIFE
+// -------------------------
+
+function loseLife() {
+
+    lives--;
+
+    document.getElementById("lives").textContent = lives;
+
+    if (lives <= 0) {
+
+        document.getElementById("gameOver").style.display = "block";
+
+        player.x = 100;
+        player.y = 300;
+
+        return;
+    }
+
+    player.x = 100;
+    player.y = 300;
+
+    player.vx = 0;
+    player.vy = 0;
+}
+
+// -------------------------
+// DRAW BACKGROUND
+// -------------------------
+
+function drawBackground() {
+
+    // Sky
+    ctx.fillStyle = "#5c94fc";
+
+    ctx.fillRect(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    // Clouds
+    ctx.fillStyle = "white";
+
+    for (let i = 0; i < 10; i++) {
+
+        let x = i * 450 - cameraX * 0.3;
+
+        ctx.beginPath();
+
+        ctx.arc(x, 100, 30, 0, Math.PI * 2);
+        ctx.arc(x + 35, 100, 40, 0, Math.PI * 2);
+        ctx.arc(x + 75, 100, 30, 0, Math.PI * 2);
+
+        ctx.fill();
+    }
+
+    // Mountains
+    ctx.fillStyle = "#78c850";
+
+    for (let i = 0; i < 10; i++) {
+
+        let x = i * 500 - cameraX * 0.5;
+
+        ctx.beginPath();
+
+        ctx.moveTo(x, 500);
+        ctx.lineTo(x + 200, 250);
+        ctx.lineTo(x + 400, 500);
+
+        ctx.fill();
+    }
+}
+
+// -------------------------
+// DRAW PLATFORMS
+// -------------------------
+
+function drawPlatforms() {
+
+    for (let platform of platforms) {
+
+        let x = platform.x - cameraX;
+
+        ctx.fillStyle = "#8B4513";
+
+        ctx.fillRect(
+            x,
+            platform.y,
+            platform.width,
+            platform.height
+        );
+
+        // Grass
+        ctx.fillStyle = "#35a832";
+
+        ctx.fillRect(
+            x,
+            platform.y,
+            platform.width,
+            8
+        );
+    }
+}
+
+// -------------------------
+// DRAW PLAYER
+// -------------------------
+
+function drawPlayer() {
+
+    let x = player.x - cameraX;
+
+    // Body
+    ctx.fillStyle = "red";
+
+    ctx.fillRect(
+        x + 5,
+        player.y,
+        25,
+        12
+    );
+
+    // Face
+    ctx.fillStyle = "#ffcc99";
+
+    ctx.fillRect(
+        x + 8,
+        player.y + 12,
+        20,
+        15
+    );
+
+    // Shirt
+    ctx.fillStyle = "red";
+
+    ctx.fillRect(
+        x + 5,
+        player.y + 27,
+        25,
+        12
+    );
+
+    // Pants
+    ctx.fillStyle = "blue";
+
+    ctx.fillRect(
+        x + 5,
+        player.y + 38,
+        10,
+        7
+    );
+
+    ctx.fillRect(
+        x + 20,
+        player.y + 38,
+        10,
+        7
+    );
+
+    // Eye
+    ctx.fillStyle = "black";
+
+    ctx.fillRect(
+        x + 22,
+        player.y + 17,
+        3,
+        3
+    );
+}
+
+// -------------------------
+// DRAW COINS
+// -------------------------
+
+function drawCoins() {
+
+    for (let coin of coins) {
+
+        if (!coin.collected) {
+
+            let x = coin.x - cameraX;
+
+            ctx.fillStyle = "gold";
+
+            ctx.beginPath();
+
+            ctx.arc(
+                x + 12,
+                coin.y + 12,
+                12,
+                0,
+                Math.PI * 2
+            );
+
+            ctx.fill();
+
+            ctx.fillStyle = "#fff176";
+
+            ctx.beginPath();
+
+            ctx.arc(
+                x + 8,
+                coin.y + 8,
+                4,
+                0,
+                Math.PI * 2
+            );
+
+            ctx.fill();
+        }
+    }
+}
+
+// -------------------------
+// DRAW ENEMIES
+// -------------------------
+
+function drawEnemies() {
+
+    for (let enemy of enemies) {
+
+        if (enemy.x < -500)
+            continue;
+
+        let x = enemy.x - cameraX;
+
+        // Body
+        ctx.fillStyle = "#8B4513";
+
+        ctx.fillRect(
+            x,
+            enemy.y,
+            enemy.width,
+            enemy.height
+        );
+
+        // Eyes
+        ctx.fillStyle = "white";
+
+        ctx.fillRect(x + 7, enemy.y + 8, 7, 7);
+        ctx.fillRect(x + 21, enemy.y + 8, 7, 7);
+
+        ctx.fillStyle = "black";
+
+        ctx.fillRect(x + 9, enemy.y + 10, 3, 3);
+        ctx.fillRect(x + 23, enemy.y + 10, 3, 3);
+    }
+}
+
+// -------------------------
+// DRAW GOAL
+// -------------------------
+
+function drawGoal() {
+
+    let x = goal.x - cameraX;
+
+    ctx.fillStyle = "white";
+
+    ctx.fillRect(
+        x,
+        goal.y,
+        goal.width,
+        goal.height
+    );
+
+    // Flag
+    ctx.fillStyle = "red";
+
+    ctx.beginPath();
+
+    ctx.moveTo(x + 20, goal.y);
+    ctx.lineTo(x + 80, goal.y + 30);
+    ctx.lineTo(x + 20, goal.y + 60);
+
+    ctx.fill();
+}
+
+// -------------------------
+// DRAW EVERYTHING
+// -------------------------
+
+function draw() {
+
+    drawBackground();
+
+    drawPlatforms();
+
+    drawCoins();
+
+    drawEnemies();
+
+    drawGoal();
+
+    drawPlayer();
+
+    document.getElementById("score").textContent = score;
+}
+
+// -------------------------
+// RESTART
+// -------------------------
+
+function restart() {
+
+    score = 0;
+    lives = 3;
+
+    document.getElementById("score").textContent = score;
+    document.getElementById("lives").textContent = lives;
+
+    document.getElementById("gameOver").style.display = "none";
+
+    player.x = 100;
+    player.y = 300;
+
+    player.vx = 0;
+    player.vy = 0;
+
+    for (let coin of coins) {
+        coin.collected = false;
+    }
+
+    enemies[0].x = 700;
+    enemies[1].x = 1200;
+    enemies[2].x = 1900;
+    enemies[3].x = 2700;
+}
+
+// -------------------------
+// GAME LOOP
+// -------------------------
+
+function gameLoop() {
+
+    if (lives > 0) {
+
+        updatePlayer();
+
+        updateEnemies();
+
+        updateCoins();
+
+        checkGoal();
+    }
+
+    draw();
+
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+
+</script>
+
+</body>
+</html>
